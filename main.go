@@ -2,24 +2,43 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
+var logger func(string, ...interface{})
+
+func init() {
+	f, err := os.Create("debug.txt")
+	if err != nil {
+		panic(err)
+	}
+
+	logger = func(format string, a ...any) {
+		fmt.Fprintf(f, format, a...)
+		fmt.Fprintln(f)
+	}
+}
+
 var (
 	borderStyle = lipgloss.NewStyle().Background(lipgloss.Color("#ffffff")).Foreground(lipgloss.Color("#ffffff"))
 )
 
 type unit struct {
-	char string
-	pos  position
+	char   string
+	pos    position
+	vector vector
 }
 
 type position struct {
+	x, y int
+}
+
+type vector struct {
 	x, y int
 }
 
@@ -29,38 +48,29 @@ type window struct {
 
 type model struct {
 	booble   unit
-	enemies  []unit
 	window   window
 	loading  bool
 	quitting bool
 }
 
-func generateEnemies(xMax, yMax int) []unit {
-	var enemies []unit
-	for i := 0; i < 10; i++ {
-		randX := rand.Intn(xMax-2) + 1
-		randY := rand.Intn(yMax-2) + 1
-		enemies = append(enemies, unit{
-			char: "x",
-			pos: position{
-				x: randX,
-				y: randY,
-			},
-		})
-	}
-	return enemies
-}
-
 func newModel() model {
 	return model{
 		booble: unit{
-			char: "o",
+			char: `
+  0
+ /|\
+ / \
+~~~~~
+"   "`,
 			pos: position{
-				x: 1,
-				y: 1,
+				x: 0,
+				y: 0,
+			},
+			vector: vector{
+				x: 0,
+				y: 0,
 			},
 		},
-		enemies: []unit{},
 		window: window{
 			width:  0,
 			height: 0,
@@ -72,12 +82,9 @@ func newModel() model {
 type tickMsg struct{}
 
 func tickerCmd() tea.Cmd {
-	timer := time.NewTicker(1 * time.Second)
 	return func() tea.Msg {
-		for range timer.C {
-			return tickMsg{}
-		}
-		return nil
+		time.Sleep(time.Second / 24)
+		return tickMsg{}
 	}
 }
 
@@ -93,35 +100,54 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		case "w":
-			m.booble.pos.y--
-			if m.booble.pos.y < 1 {
-				m.booble.pos.y = 1
+			if m.booble.pos.y == 0 {
+				m.booble.vector.y = 4
 			}
 		case "a":
-			m.booble.pos.x -= 2
-			if m.booble.pos.x < 1 {
-				m.booble.pos.x = 1
+			if m.booble.pos.y == 0 {
+				if m.booble.vector.x > 0 {
+					m.booble.vector.x = 0
+				} else if m.booble.vector.x > -2 {
+					m.booble.vector.x--
+				}
 			}
 		case "s":
-			m.booble.pos.y++
-			if m.booble.pos.y > m.window.height-2 {
-				m.booble.pos.y = m.window.height - 2
-			}
 		case "d":
-			m.booble.pos.x += 2
-			if m.booble.pos.x > m.window.width-2 {
-				m.booble.pos.x = m.window.width - 2
+			if m.booble.pos.y == 0 {
+				if m.booble.vector.x < 0 {
+					m.booble.vector.x = 0
+				} else if m.booble.vector.x < 2 {
+					m.booble.vector.x++
+				}
 			}
 		}
+		return m, nil
 	case tickMsg:
-		// Do something here
+		// y component
+		m.booble.pos.y += m.booble.vector.y
+		m.booble.vector.y--
+		if m.booble.pos.y <= 0 {
+			m.booble.pos.y = 0
+			m.booble.vector.y = 0
+		}
+		// x component
+		m.booble.pos.x += m.booble.vector.x
+		if m.booble.pos.x < 0 {
+			m.booble.pos.x = 0
+			m.booble.vector.x = 0
+		}
+		if m.booble.pos.x > m.window.width-6 {
+			m.booble.pos.x = m.window.width - 6
+			m.booble.vector.x = 0
+		}
+		return m, tickerCmd()
 	case tea.WindowSizeMsg:
 		m.window.width = msg.Width
-		m.window.height = msg.Height - 1
+		m.window.height = msg.Height
 		if m.loading {
-			m.enemies = generateEnemies(m.window.width, m.window.height)
 			m.loading = false
 		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -131,31 +157,50 @@ func (m model) View() string {
 		return "Loading..."
 	}
 
-	s := ""
+	s := drawBackground(m.window.width, m.window.height)
+	s = drawUnit(s, m.booble)
 
-	for y := 0; y < m.window.height; y++ {
-	XLOOP:
-		for x := 0; x < m.window.width; x++ {
-			if x == 0 || x == m.window.width-1 {
-				s += borderStyle.Render(" ")
-			} else if y == 0 || y == m.window.height-1 {
-				s += borderStyle.Render(" ")
-			} else if m.booble.pos.x == x && m.booble.pos.y == y {
-				s += m.booble.char
-			} else {
-				for _, enemy := range m.enemies {
-					if enemy.pos.x == x && enemy.pos.y == y {
-						s += enemy.char
-						continue XLOOP
-					}
-				}
-				s += " "
-			}
-		}
-		s += "\n"
+	return strings.Join(s, "\n")
+}
+
+const (
+	minHeight = 20
+	minWidth  = 80
+)
+
+func drawBackground(width, height int) []string {
+	if width < minWidth || height < minHeight {
+		return []string{"Terminal window is too small. Please resize and try again."}
 	}
+	result := []string{}
+	for y := 0; y < height; y++ {
+		if y == height-2 {
+			result = append(result, stringRepeat("-", width))
+		} else if y == height-1 {
+			result = append(result, stringRepeat("/", width))
+		} else {
+			result = append(result, stringRepeat(" ", width))
+		}
+	}
+	return result
+}
 
+func drawUnit(s []string, u unit) []string {
+	lines := strings.Split(u.char, "\n")
+	for i := len(lines) - 1; i > 0; i-- {
+		line := lines[i]
+		posY := i + len(s) - 2 - len(lines) - u.pos.y
+		s[posY] = s[posY][:u.pos.x] + line + s[posY][u.pos.x+len(line):]
+	}
 	return s
+}
+
+func stringRepeat(s string, n int) string {
+	result := ""
+	for i := 0; i < n; i++ {
+		result += s
+	}
+	return result
 }
 
 func main() {
