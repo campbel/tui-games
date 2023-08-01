@@ -7,7 +7,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 var logger func(string, ...interface{})
@@ -23,10 +22,6 @@ func init() {
 		fmt.Fprintln(f)
 	}
 }
-
-var (
-	borderStyle = lipgloss.NewStyle().Background(lipgloss.Color("#ffffff")).Foreground(lipgloss.Color("#ffffff"))
-)
 
 type unit struct {
 	char   string
@@ -57,11 +52,10 @@ func newModel() model {
 	return model{
 		booble: unit{
 			char: `
-  0
+  O
  /|\
  / \
-~~~~~
-"   "`,
+<>-<>`,
 			pos: position{
 				x: 0,
 				y: 0,
