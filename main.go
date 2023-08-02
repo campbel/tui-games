@@ -24,9 +24,11 @@ func init() {
 }
 
 type unit struct {
-	char   string
-	pos    position
-	vector vector
+	width, height int
+	char          string
+	pos           position
+	vector        vector
+	stable        bool
 }
 
 type position struct {
@@ -43,16 +45,39 @@ type window struct {
 
 type model struct {
 	booble   unit
+	level    level
 	window   window
 	loading  bool
 	quitting bool
 }
 
-func newModel() model {
+type level struct {
+	content []string
+	width   int
+	height  int
+}
+
+func newLevel(content []string) level {
+	width := 0
+	height := len(content)
+	for _, line := range content {
+		if len(line) > width {
+			width = len(line)
+		}
+	}
+	return level{
+		content: content,
+		width:   width,
+		height:  height,
+	}
+}
+
+func newModel(level []string) model {
 	return model{
 		booble: unit{
-			char: `
-  O
+			height: 4,
+			width:  5,
+			char: `  O
  /|\
  / \
 <>-<>`,
@@ -64,7 +89,9 @@ func newModel() model {
 				x: 0,
 				y: 0,
 			},
+			stable: false,
 		},
+		level: newLevel(level),
 		window: window{
 			width:  0,
 			height: 0,
@@ -77,7 +104,7 @@ type tickMsg struct{}
 
 func tickerCmd() tea.Cmd {
 	return func() tea.Msg {
-		time.Sleep(time.Second / 24)
+		time.Sleep(time.Second / 12)
 		return tickMsg{}
 	}
 }
@@ -93,21 +120,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			m.quitting = true
 			return m, tea.Quit
-		case "w":
-			if m.booble.pos.y == 0 {
-				m.booble.vector.y = 4
+		case "w", "W":
+			if m.booble.stable {
+				m.booble.vector.y = -4
 			}
-		case "a":
-			if m.booble.pos.y == 0 {
+		case "a", "A":
+			if m.booble.stable {
 				if m.booble.vector.x > 0 {
 					m.booble.vector.x = 0
 				} else if m.booble.vector.x > -2 {
 					m.booble.vector.x--
 				}
 			}
-		case "s":
-		case "d":
-			if m.booble.pos.y == 0 {
+		case "s", "S":
+		case "d", "D":
+			if m.booble.stable {
 				if m.booble.vector.x < 0 {
 					m.booble.vector.x = 0
 				} else if m.booble.vector.x < 2 {
@@ -118,20 +145,41 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tickMsg:
 		// y component
-		m.booble.pos.y += m.booble.vector.y
-		m.booble.vector.y--
-		if m.booble.pos.y <= 0 {
-			m.booble.pos.y = 0
-			m.booble.vector.y = 0
+		if m.booble.vector.y < 0 {
+			m.booble.pos.y += m.booble.vector.y
+			m.booble.vector.y++
 		}
+		for i := 0; i < m.booble.vector.y; i++ {
+			if m.booble.pos.y+m.booble.height > m.level.height {
+				return m, tea.Quit
+			}
+			for j := 0; j < m.booble.width; j++ {
+				if m.level.content[m.booble.pos.y+m.booble.height+1][m.booble.pos.x+j] == '-' {
+					m.booble.vector.y = 0
+					break
+				}
+			}
+			m.booble.pos.y++
+		}
+		m.booble.stable = false
+		for j := 0; j < m.booble.width; j++ {
+			if m.level.content[m.booble.pos.y+m.booble.height][m.booble.pos.x+j] == '-' {
+				m.booble.stable = true
+				break
+			}
+		}
+		if !m.booble.stable {
+			m.booble.vector.y++
+		}
+
 		// x component
 		m.booble.pos.x += m.booble.vector.x
 		if m.booble.pos.x < 0 {
 			m.booble.pos.x = 0
 			m.booble.vector.x = 0
 		}
-		if m.booble.pos.x > m.window.width-6 {
-			m.booble.pos.x = m.window.width - 6
+		if m.booble.pos.x > m.level.width-m.booble.width {
+			m.booble.pos.x = m.level.width - m.booble.width
 			m.booble.vector.x = 0
 		}
 		return m, tickerCmd()
@@ -151,8 +199,9 @@ func (m model) View() string {
 		return "Loading..."
 	}
 
-	s := drawBackground(m.window.width, m.window.height)
-	s = drawUnit(s, m.booble)
+	s := drawLevel(m.window, m.level)
+	s = drawUnit(s, m.window, m.level, m.booble)
+	s = drawInfo(s, m.window, m.level, m.booble)
 
 	return strings.Join(s, "\n")
 }
@@ -162,30 +211,35 @@ const (
 	minWidth  = 80
 )
 
-func drawBackground(width, height int) []string {
-	if width < minWidth || height < minHeight {
+func drawLevel(window window, level level) []string {
+	if window.width < minWidth || window.height < level.height {
 		return []string{"Terminal window is too small. Please resize and try again."}
 	}
-	result := []string{}
-	for y := 0; y < height; y++ {
-		if y == height-2 {
-			result = append(result, stringRepeat("-", width))
-		} else if y == height-1 {
-			result = append(result, stringRepeat("/", width))
-		} else {
-			result = append(result, stringRepeat(" ", width))
+	offset := window.height - level.height
+	result := make([]string, window.height)
+	for i := 0; i < window.height; i++ {
+		if i < offset {
+			result[i] = stringRepeat(" ", window.width)
+			continue
 		}
+		result[i] = level.content[i-offset] + stringRepeat(" ", window.width-len(level.content[i-offset]))
 	}
 	return result
 }
 
-func drawUnit(s []string, u unit) []string {
+func drawUnit(s []string, window window, level level, u unit) []string {
 	lines := strings.Split(u.char, "\n")
-	for i := len(lines) - 1; i > 0; i-- {
+	offset := window.height - level.height
+	for i := 0; i < len(lines); i++ {
 		line := lines[i]
-		posY := i + len(s) - 2 - len(lines) - u.pos.y
-		s[posY] = s[posY][:u.pos.x] + line + s[posY][u.pos.x+len(line):]
+		posy := offset + u.pos.y + i
+		s[posy] = s[posy][:u.pos.x] + line + s[posy][u.pos.x+len(line):]
 	}
+	return s
+}
+
+func drawInfo(s []string, window window, level level, u unit) []string {
+	s[0] = fmt.Sprintf("X: %d Y: %d dX: %d, dY: %d", u.pos.x, u.pos.y, u.vector.x, u.vector.y)
 	return s
 }
 
@@ -198,8 +252,29 @@ func stringRepeat(s string, n int) string {
 }
 
 func main() {
-	if _, err := tea.NewProgram(newModel(), tea.WithAltScreen()).Run(); err != nil {
+	data, err := os.ReadFile("level.txt")
+	if err != nil {
+		fmt.Println("Error reading file:", err)
+		os.Exit(1)
+	}
+	lines := processFile(data)
+
+	if _, err := tea.NewProgram(newModel(lines), tea.WithAltScreen()).Run(); err != nil {
 		fmt.Println("Error running program:", err)
 		os.Exit(1)
 	}
+}
+
+func processFile(data []byte) []string {
+	lines := strings.Split(string(data), "\n")
+	width := 0
+	for _, line := range lines {
+		if len(line) > width {
+			width = len(line)
+		}
+	}
+	for i, line := range lines {
+		lines[i] = line + stringRepeat(" ", width-len(line))
+	}
+	return lines
 }
