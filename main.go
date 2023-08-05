@@ -142,7 +142,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "w", "W", " ", "up":
 			if m.booble.stable {
-				m.booble.vector.y = -4
+				m.booble.vector.y = -3
+				if m.booble.vector.x != 0 {
+					m.booble.vector.y -= abs(m.booble.vector.x)
+				}
 			}
 		case "a", "A", "left":
 			if m.booble.stable {
@@ -164,13 +167,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tickMsg:
-		// y component
 		if m.booble.vector.y < 0 {
 			m.booble.pos.y += m.booble.vector.y
 			m.booble.vector.y++
 		}
 		for i := 0; i < m.booble.vector.y; i++ {
-			if m.booble.pos.y+m.booble.height > m.level.height {
+			if m.booble.pos.y+m.booble.height+1 >= m.level.height {
 				return m, tea.Quit
 			}
 			for j := 0; j < m.booble.width; j++ {
@@ -181,6 +183,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.booble.pos.y++
 		}
+
 		m.booble.stable = false
 		for j := 0; j < m.booble.width; j++ {
 			if m.level.content[m.booble.pos.y+m.booble.height][m.booble.pos.x+j] == '-' {
@@ -323,4 +326,11 @@ func processFile(data []byte) []string {
 		lines[i] = line + stringRepeat(" ", width-len(line))
 	}
 	return lines
+}
+
+func abs(i int) int {
+	if i < 0 {
+		return -i
+	}
+	return i
 }
