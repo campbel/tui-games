@@ -202,6 +202,7 @@ func (m model) View() string {
 	s := drawLevel(m.window, m.level)
 	s = drawUnit(s, m.window, m.level, m.booble)
 	s = drawInfo(s, m.window, m.level, m.booble)
+	s = drawFrame(s, m.window, m.level, m.booble)
 
 	return strings.Join(s, "\n")
 }
@@ -241,6 +242,28 @@ func drawUnit(s []string, window window, level level, u unit) []string {
 func drawInfo(s []string, window window, level level, u unit) []string {
 	s[0] = fmt.Sprintf("X: %d Y: %d dX: %d, dY: %d", u.pos.x, u.pos.y, u.vector.x, u.vector.y)
 	return s
+}
+
+func drawFrame(s []string, window window, level level, u unit) []string {
+	// draw the relevant frame in the window
+	var result = make([]string, len(s))
+
+	for i := len(s) - 1; i >= 0; i-- {
+		if i < window.height-level.height {
+			result[i] = s[i]
+			continue
+		}
+
+		startFrame := 0
+		if u.pos.x > window.width/2 {
+			startFrame = u.pos.x - window.width/2
+		}
+		if startFrame+window.width > level.width {
+			startFrame = level.width - window.width
+		}
+		result[i] = s[i][startFrame : startFrame+window.width]
+	}
+	return result
 }
 
 func stringRepeat(s string, n int) string {
