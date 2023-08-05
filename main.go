@@ -57,7 +57,7 @@ type level struct {
 	height  int
 }
 
-func newLevel(content []string) level {
+func NewLayer(content []string) level {
 	width := 0
 	height := len(content)
 	for _, line := range content {
@@ -111,7 +111,7 @@ func newModel(level []string) model {
 			},
 			stable: false,
 		},
-		level: newLevel(level),
+		level: NewLayer(level),
 		window: window{
 			width:  0,
 			height: 0,
