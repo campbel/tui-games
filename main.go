@@ -25,7 +25,7 @@ func init() {
 
 type unit struct {
 	width, height int
-	char          string
+	char          func(u unit) string
 	pos           position
 	vector        vector
 	stable        bool
@@ -77,10 +77,30 @@ func newModel(level []string) model {
 		booble: unit{
 			height: 4,
 			width:  5,
-			char: `  O
+			char: func(u unit) string {
+				var s string
+				switch u.vector.x {
+				case 1, 2:
+					s = `
+  O/
+ /|
+ / \
+<>-<>`
+				case -1, -2:
+					s = `
+ \O
+  |\
+ / \
+<>-<>`
+				default:
+					s = `
+  O
  /|\
  / \
-<>-<>`,
+<>-<>`
+				}
+				return strings.TrimLeft(s, "\n")
+			},
 			pos: position{
 				x: 0,
 				y: 0,
@@ -104,7 +124,7 @@ type tickMsg struct{}
 
 func tickerCmd() tea.Cmd {
 	return func() tea.Msg {
-		time.Sleep(time.Second / 12)
+		time.Sleep(time.Second / 24)
 		return tickMsg{}
 	}
 }
@@ -232,7 +252,7 @@ func drawLevel(window window, level level) []string {
 }
 
 func drawUnit(s []string, window window, level level, u unit) []string {
-	lines := strings.Split(u.char, "\n")
+	lines := strings.Split(u.char(u), "\n")
 	offset := window.height - level.height
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
