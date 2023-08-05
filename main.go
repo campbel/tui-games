@@ -120,11 +120,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			m.quitting = true
 			return m, tea.Quit
-		case "w", "W":
+		case "w", "W", " ", "up":
 			if m.booble.stable {
 				m.booble.vector.y = -4
 			}
-		case "a", "A":
+		case "a", "A", "left":
 			if m.booble.stable {
 				if m.booble.vector.x > 0 {
 					m.booble.vector.x = 0
@@ -133,7 +133,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "s", "S":
-		case "d", "D":
+		case "d", "D", "right":
 			if m.booble.stable {
 				if m.booble.vector.x < 0 {
 					m.booble.vector.x = 0
@@ -197,6 +197,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	if m.loading {
 		return "Loading..."
+	}
+	if m.level.height+5 > m.window.height {
+		return "Window is to small, please resize."
 	}
 
 	s := drawLevel(m.window, m.level)
